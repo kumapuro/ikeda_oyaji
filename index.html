@@ -143,7 +143,7 @@
         <input id="rate" type="number" inputmode="decimal" min="1" max="99" value="30" placeholder="売値に対する原価の割合">
       </label>
       <label>想定販売数(個)
-        <input id="expected" type="number" inputmode="numeric" min="0" value="100">
+        <input id="expected" type="number" inputmode="numeric" min="0" value="300">
       </label>
       <label>自分で決めた販売単価(円・任意)
         <input id="mine" type="number" inputmode="numeric" min="0" placeholder="空欄ならなし">
@@ -324,10 +324,10 @@ def calc(event=None):
 
 
 # 初期表示(例。自分の材料に書きかえてください)
-new_row("油", 500, 1000, 20, "ml")
-new_row("ポテト", 400, 1000, 100, "g")
-new_row("ポップコーン", 300, 500, 30, "g")
-new_row("紙コップ", 10, 1, 1, "個")
+new_row("油", 714, 1500, 20, "ml")
+new_row("ポテト", 1786, 2500, 100, "g")
+new_row("ポップコーン", 378, 1000, 20, "g")
+new_row("紙コップ", 350, 100, 1, "個")
 calc()
 </script>
 </body>
