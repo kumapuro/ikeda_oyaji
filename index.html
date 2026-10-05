@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出店かんたん原価計算</title>
+
+<!-- PyScript (MicroPython) -->
+<link rel="stylesheet" href="https://pyscript.net/releases/2025.8.1/core.css">
+<script type="module" src="https://pyscript.net/releases/2025.8.1/core.js"></script>
+
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --ink: #1c2430;
+    --sub: #5b6676;
+    --line: #d6dce5;
+    --navy: #1b2f4b;
+    --gold: #f5b800;
+    --red: #c0392b;
+    --green: #1f7a4d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+    line-height: 1.7;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 10px; }
+  .lead { color: var(--sub); margin: 0 0 20px; }
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .hint { color: var(--sub); font-size: 0.85rem; margin: 0 0 10px; }
+
+  /* 材料の行 */
+  .row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr 1fr 4.5em 5.5em 2.2em;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .row.head { color: var(--sub); font-size: 0.78rem; margin-bottom: 2px; }
+  input {
+    width: 100%;
+    font: inherit;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+    min-width: 0;
+  }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+  .cost { text-align: right; font-variant-numeric: tabular-nums; }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid var(--navy);
+    background: var(--navy);
+    color: #fff;
+    padding: 8px 14px;
+  }
+  button.ghost { background: #fff; color: var(--navy); }
+  button.del { padding: 4px 0; background: #fff; color: var(--red); border-color: var(--line); }
+
+  /* 条件 */
+  .cond { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .cond label { display: block; font-size: 0.85rem; color: var(--sub); }
+  .cond input { margin-top: 2px; }
+
+  /* 結果 */
+  #result-box {
+    background: var(--navy);
+    color: #fff;
+    border-radius: 10px;
+    padding: 18px 16px;
+    margin-bottom: 16px;
+  }
+  .big { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 10px; }
+  .big div span { display: block; font-size: 0.8rem; opacity: 0.8; }
+  .big div b { font-size: 1.9rem; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .verdict { margin: 4px 0 0; }
+  .empty { margin: 0; }
+
+  .scroll { overflow-x: auto; margin-top: 14px; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; background: var(--panel); color: var(--ink); }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 0.8rem; color: var(--sub); font-weight: 600; background: #eef1f6; }
+  tr.main td { font-weight: 700; background: #fff8dc; }
+  .plus { color: var(--green); }
+  .minus { color: var(--red); }
+
+  .note { color: var(--sub); font-size: 0.82rem; }
+
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 1fr 1fr 1fr; }
+    .row .name { grid-column: 1 / 4; }
+    .row.head { display: none; }
+    .row .cost { text-align: left; }
+    .row { padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
+  }
+</style>
+</head>
+
+<body>
+<main py-input="calc">
+  <h1>出店かんたん原価計算</h1>
+  <p class="lead">材料と値段を入れると、1個あたりの原価・販売単価の案・損益分岐点を見積もります。</p>
+
+  <section class="panel">
+    <h2>1. 材料(商品1個をつくるのに使うもの)</h2>
+    <p class="hint">「購入価格」と「購入量」は買ったときの値段と量。「1個の使用量」は商品1個に使う量です(単位は同じにそろえてください)。容器や割りばしも材料として入れましょう。</p>
+    <div class="row head">
+      <span>材料名</span><span>購入価格(円)</span><span>購入量</span><span>1個の使用量</span><span>単位</span><span style="text-align:right">1個の原価</span><span></span>
+    </div>
+    <div id="rows"></div>
+    <button class="ghost" py-click="add_row">材料を追加</button>
+  </section>
+
+  <section class="panel">
+    <h2>2. 出店の条件</h2>
+    <div class="cond">
+      <label>固定費の合計(円)
+        <input id="fixed" type="number" inputmode="numeric" min="0" value="10000" placeholder="出店料・レンタル代など">
+      </label>
+      <label>想定ロス率(%)
+        <input id="loss" type="number" inputmode="decimal" min="0" max="99" value="5" placeholder="廃棄・失敗の割合">
+      </label>
+      <label>目標原価率(%)
+        <input id="rate" type="number" inputmode="decimal" min="1" max="99" value="30" placeholder="売値に対する原価の割合">
+      </label>
+      <label>想定販売数(個)
+        <input id="expected" type="number" inputmode="numeric" min="0" value="100">
+      </label>
+      <label>自分で決めた販売単価(円・任意)
+        <input id="mine" type="number" inputmode="numeric" min="0" placeholder="空欄ならなし">
+      </label>
+    </div>
+  </section>
+
+  <section id="result-box" aria-live="polite">
+    <div id="summary"></div>
+  </section>
+  <div class="scroll" id="table"></div>
+
+  <p class="note">※ 販売単価は10円単位に切り上げた税込の目安です。消費税の区分、決済手数料、人件費、天候による変動は含んでいません。原価率 = 原価 ÷ 販売単価。損益分岐点 = 固定費 ÷ 1個あたりの利益。</p>
+
+  <button id="recalc" py-click="calc" hidden>再計算</button>
+</main>
+
+<script type="mpy">
+from pyscript import document
+import math
+
+ROW_HTML = (
+    '<div class="row">'
+    '<input class="name" type="text" placeholder="材料名" value="{name}" aria-label="材料名">'
+    '<input class="price" type="number" inputmode="decimal" min="0" placeholder="円" value="{price}" aria-label="購入価格">'
+    '<input class="qty" type="number" inputmode="decimal" min="0" placeholder="量" value="{qty}" aria-label="購入量">'
+    '<input class="use" type="number" inputmode="decimal" min="0" placeholder="量" value="{use}" aria-label="1個の使用量">'
+    '<input class="unit" type="text" placeholder="g" value="{unit}" aria-label="単位">'
+    '<span class="cost">0円</span>'
+    '<button class="del" aria-label="この材料を削除" '
+    'onclick="this.parentElement.remove(); document.getElementById(\'recalc\').click()">×</button>'
+    '</div>'
+)
+
+
+def el(id):
+    return document.getElementById(id)
+
+
+def num(e, default=0.0):
+    try:
+        return float(e.value)
+    except:
+        return default
+
+
+def yen(x):
+    n = int(round(x))
+    s = str(abs(n))
+    out = ""
+    while len(s) > 3:
+        out = "," + s[-3:] + out
+        s = s[:-3]
+    out = s + out
+    if n < 0:
+        out = "-" + out
+    return out
+
+
+def fmt1(x):
+    return str(round(x, 1))
+
+
+def new_row(name="", price="", qty="", use="", unit=""):
+    html = ROW_HTML.format(name=name, price=price, qty=qty, use=use, unit=unit)
+    el("rows").insertAdjacentHTML("beforeend", html)
+
+
+def add_row(event=None):
+    new_row()
+
+
+def signed(x):
+    cls = "plus" if x >= 0 else "minus"
+    return '<span class="' + cls + '">' + yen(x) + "円</span>"
+
+
+def scenario_row(label, price, unit_cost, fixed, n, main):
+    margin = price - unit_cost
+    if margin > 0:
+        be = int(math.ceil(fixed / margin))
+        be_text = yen(be) + "個"
+        sales_text = yen(be * price) + "円"
+    else:
+        be_text = "赤字"
+        sales_text = "-"
+    profit = margin * n - fixed
+    cls = ' class="main"' if main else ""
+    return (
+        "<tr" + cls + "><td>" + label + "</td>"
+        "<td>" + yen(price) + "円</td>"
+        "<td>" + signed(margin) + "</td>"
+        "<td>" + be_text + "</td>"
+        "<td>" + sales_text + "</td>"
+        "<td>" + signed(profit) + "</td></tr>"
+    )
+
+
+def calc(event=None):
+    # 材料の合計原価
+    rows = document.querySelectorAll("#rows .row")
+    mat = 0.0
+    for i in range(int(rows.length)):
+        r = rows.item(i)
+        price = num(r.querySelector(".price"))
+        qty = num(r.querySelector(".qty"))
+        use = num(r.querySelector(".use"))
+        c = price / qty * use if qty > 0 else 0.0
+        r.querySelector(".cost").textContent = fmt1(c) + "円"
+        mat += c
+
+    fixed = num(el("fixed"))
+    loss = num(el("loss"))
+    rate = num(el("rate"), 30)
+    n = num(el("expected"))
+    mine = num(el("mine"))
+
+    summary = el("summary")
+    table = el("table")
+
+    if mat <= 0:
+        summary.innerHTML = '<p class="empty">材料の「購入価格・購入量・1個の使用量」を入れると、結果が表示されます。</p>'
+        table.innerHTML = ""
+        return
+    if loss < 0 or loss >= 100:
+        summary.innerHTML = '<p class="empty">ロス率は0〜99%の範囲で入れてください。</p>'
+        table.innerHTML = ""
+        return
+    if rate <= 0 or rate >= 100:
+        summary.innerHTML = '<p class="empty">目標原価率は1〜99%の範囲で入れてください。</p>'
+        table.innerHTML = ""
+        return
+
+    unit_cost = mat / (1 - loss / 100.0)
+
+    # 目標原価率からの販売単価案(10円単位で切り上げ)
+    def suggest(rt):
+        return int(math.ceil(unit_cost / (rt / 100.0) / 10.0)) * 10
+
+    p0 = suggest(rate)
+    m0 = p0 - unit_cost
+    be0 = int(math.ceil(fixed / m0)) if m0 > 0 else 0
+
+    profit0 = m0 * n - fixed
+    if n > 0:
+        if profit0 >= 0:
+            verdict = yen(n) + "個売れれば、利益は約" + yen(profit0) + "円です。"
+        else:
+            verdict = yen(n) + "個の販売では、約" + yen(-profit0) + "円の赤字になります。"
+    else:
+        verdict = ""
+
+    summary.innerHTML = (
+        '<div class="big">'
+        '<div><span>1個の原価(ロス込み)</span><b>' + fmt1(unit_cost) + '円</b></div>'
+        '<div><span>販売単価の案(原価率' + str(round(rate, 1)) + '%)</span><b>' + yen(p0) + '円</b></div>'
+        '<div><span>損益分岐点</span><b>' + yen(be0) + '個</b></div>'
+        '</div>'
+        '<p class="verdict">' + verdict + '</p>'
+    )
+
+    # 比較表
+    html = (
+        '<table><thead><tr>'
+        '<th>案</th><th>販売単価</th><th>1個の利益</th>'
+        '<th>損益分岐(個数)</th><th>損益分岐(売上)</th><th>' + yen(n) + '個売った時の利益</th>'
+        '</tr></thead><tbody>'
+    )
+    html += scenario_row("目標原価率 " + str(round(rate, 1)) + "%", p0, unit_cost, fixed, n, True)
+    for rt in (25, 30, 35, 40):
+        if rt == rate:
+            continue
+        html += scenario_row("原価率 " + str(rt) + "%", suggest(rt), unit_cost, fixed, n, False)
+    if mine > 0:
+        html += scenario_row("自分の販売単価", mine, unit_cost, fixed, n, True)
+    html += "</tbody></table>"
+    table.innerHTML = html
+
+
+# 初期表示(例。自分の材料に書きかえてください)
+new_row("揚げ油", 300, 1000, 30, "g")
+new_row("ポテト", 500, 200, 15, "g")
+new_row("容器", 30, 1, 1, "個")
+calc()
+</script>
+</body>
+</html>
